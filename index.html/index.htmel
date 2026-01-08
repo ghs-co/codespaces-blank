@@ -1,0 +1,673 @@
+import os, textwrap, zipfile, pathlib, re
+
+html = r"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>AnswerInstant AI — AI that answers, books, and follows up (24/7)</title>
+  <meta name="description" content="AnswerInstant AI: A hands-free AI receptionist that answers calls + texts, books appointments, captures leads, and follows up automatically." />
+  <meta name="theme-color" content="#090B10" />
+
+  <style>
+    :root{
+      --bg0:#070910;
+      --bg1:#0a0f1d;
+      --ink:#eef2ff;
+      --muted:rgba(238,242,255,.70);
+      --muted2:rgba(238,242,255,.55);
+
+      --shadow: 0 25px 70px rgba(0,0,0,.45);
+
+      --neon:#59f2ff;
+      --neon2:#9d7bff;
+      --neon3:#2dff9f;
+
+      --radius:18px;
+      --radius2:28px;
+
+      --max:1180px;
+      --pad: clamp(16px, 3.5vw, 28px);
+
+      --h1: clamp(34px, 4.5vw, 56px);
+      --h2: clamp(24px, 3vw, 34px);
+      --p: 15.5px;
+
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      color:var(--ink);
+      font-family:var(--sans);
+      background:
+        radial-gradient(1200px 700px at 15% 10%, rgba(93,231,255,.16), transparent 60%),
+        radial-gradient(900px 550px at 85% 30%, rgba(157,123,255,.14), transparent 55%),
+        radial-gradient(1000px 800px at 55% 95%, rgba(45,255,159,.09), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      overflow-x:hidden;
+    }
+
+    .bg-overlay{
+      position:fixed; inset:0;
+      pointer-events:none;
+      background:
+        radial-gradient(900px 400px at 30% 30%, rgba(255,255,255,.06), transparent 60%),
+        radial-gradient(700px 360px at 70% 65%, rgba(255,255,255,.05), transparent 62%),
+        radial-gradient(1200px 700px at 40% 85%, rgba(255,255,255,.035), transparent 68%),
+        linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+      background-size: auto, auto, auto, 48px 48px, 48px 48px;
+      mix-blend-mode:overlay;
+      opacity:.30;
+      filter: blur(.2px);
+    }
+
+    .streak{
+      position:fixed;
+      width:900px; height:220px;
+      left:-220px; top:10vh;
+      background: linear-gradient(90deg, transparent, rgba(89,242,255,.20), rgba(157,123,255,.18), transparent);
+      filter: blur(28px);
+      transform: rotate(8deg);
+      opacity:.45;
+      pointer-events:none;
+      animation: floatStreak 10s ease-in-out infinite;
+    }
+    .streak.s2{
+      left:auto; right:-260px; top:62vh;
+      width:980px; height:260px;
+      background: linear-gradient(90deg, transparent, rgba(45,255,159,.18), rgba(89,242,255,.14), transparent);
+      transform: rotate(-10deg);
+      animation-duration: 12s;
+      opacity:.35;
+    }
+    @keyframes floatStreak{
+      0%,100%{ transform: translateY(0) rotate(8deg); }
+      50%{ transform: translateY(-18px) rotate(8deg); }
+    }
+
+    a{ color:inherit; text-decoration:none; }
+    .wrap{ width:100%; max-width:var(--max); margin:0 auto; padding:0 var(--pad); }
+
+    /* ===== Nav ===== */
+    header{
+      position:sticky; top:0; z-index:60;
+      backdrop-filter: blur(14px);
+      background: linear-gradient(180deg, rgba(7,9,16,.86), rgba(7,9,16,.55));
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .nav{
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 14px 0;
+      gap: 12px;
+    }
+    .brand{ display:flex; align-items:center; gap:10px; min-width:180px; }
+    .logo{
+      width:34px; height:34px; border-radius:12px;
+      background:
+        radial-gradient(12px 12px at 30% 30%, rgba(255,255,255,.25), transparent 60%),
+        linear-gradient(135deg, rgba(89,242,255,.9), rgba(157,123,255,.75));
+      box-shadow: 0 0 24px rgba(89,242,255,.20);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .brand b{ font-weight:820; letter-spacing:.2px; }
+    .brand small{
+      display:block;
+      color:var(--muted2);
+      font-family:var(--mono);
+      font-size:11px;
+      margin-top:2px;
+    }
+
+    .navlinks{ display:flex; align-items:center; gap:18px; }
+    .navlinks a{
+      color:var(--muted);
+      font-size:13px;
+      letter-spacing:.2px;
+      padding:8px 10px;
+      border-radius:12px;
+      transition: .18s ease;
+    }
+    .navlinks a:hover{ color:var(--ink); background: rgba(255,255,255,.06); }
+
+    .navcta{ display:flex; align-items:center; gap:10px; }
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:10px;
+      padding: 11px 14px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color:var(--ink);
+      font-size:13px;
+      font-weight:650;
+      letter-spacing:.2px;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+      box-shadow: 0 10px 40px rgba(0,0,0,.22);
+      cursor:pointer;
+      user-select:none;
+    }
+    .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); }
+    .btn.primary{
+      background: linear-gradient(135deg, rgba(89,242,255,.95), rgba(157,123,255,.85));
+      border-color: rgba(255,255,255,.18);
+      color:#07101a;
+      box-shadow: 0 18px 60px rgba(89,242,255,.18);
+    }
+    .btn.primary:hover{ background: linear-gradient(135deg, rgba(89,242,255,1), rgba(157,123,255,.95)); }
+
+    .hamburger{
+      display:none;
+      width:44px; height:44px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      align-items:center; justify-content:center;
+      cursor:pointer;
+    }
+    .hamburger span{
+      width:18px; height:2px; background:rgba(255,255,255,.82);
+      display:block; position:relative;
+    }
+    .hamburger span:before,.hamburger span:after{
+      content:""; position:absolute; left:0;
+      width:18px; height:2px; background:rgba(255,255,255,.82);
+    }
+    .hamburger span:before{ top:-6px; }
+    .hamburger span:after{ top:6px; }
+
+    /* ===== Hero ===== */
+    .hero{
+      padding: clamp(22px, 5.2vw, 62px) 0 26px;
+      position:relative;
+    }
+    .heroGrid{
+      display:grid;
+      grid-template-columns: 1.15fr .9fr;
+      gap: clamp(18px, 3vw, 34px);
+      align-items:stretch;
+    }
+
+    .kicker{
+      display:inline-flex; align-items:center; gap:10px;
+      padding:8px 12px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color:var(--muted);
+      font-size:12.5px;
+      letter-spacing:.25px;
+      width: fit-content;
+    }
+    .dot{
+      width:10px; height:10px; border-radius:999px;
+      background: radial-gradient(circle at 30% 30%, #ffffff, var(--neon));
+      box-shadow: 0 0 18px rgba(89,242,255,.35);
+    }
+
+    h1{
+      margin: 14px 0 10px;
+      font-size:var(--h1);
+      line-height:1.05;
+      letter-spacing:-.6px;
+    }
+    .grad{
+      background: linear-gradient(90deg, rgba(89,242,255,1), rgba(157,123,255,1), rgba(45,255,159,.9));
+      -webkit-background-clip:text;
+      background-clip:text;
+      color:transparent;
+    }
+
+    .sub{
+      color:var(--muted);
+      font-size: clamp(15px, 1.35vw, 18px);
+      line-height:1.55;
+      max-width: 62ch;
+      margin: 0 0 14px;
+    }
+
+    .heroActions{ display:flex; gap:12px; flex-wrap:wrap; margin: 14px 0 0; }
+
+    /* Hero panel */
+    .panel{
+      border-radius: var(--radius2);
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+    .panel:before{
+      content:"";
+      position:absolute; inset:-2px;
+      background:
+        radial-gradient(450px 220px at 20% 10%, rgba(89,242,255,.20), transparent 60%),
+        radial-gradient(380px 240px at 70% 30%, rgba(157,123,255,.18), transparent 55%),
+        radial-gradient(420px 240px at 50% 90%, rgba(45,255,159,.12), transparent 60%);
+      pointer-events:none;
+      opacity:.85;
+    }
+    .panelInner{ position:relative; padding: 18px; }
+
+    .miniTitle{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
+      padding: 12px 12px;
+      border-radius: 16px;
+      background: rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.10);
+      margin-bottom: 12px;
+    }
+    .miniTitle b{ font-size:13px; letter-spacing:.2px; }
+    .status{
+      display:flex; align-items:center; gap:8px;
+      color: rgba(45,255,159,.95);
+      font-family: var(--mono);
+      font-size:11.5px;
+    }
+    .status i{
+      width:9px; height:9px; border-radius:999px;
+      background: rgba(45,255,159,.95);
+      box-shadow: 0 0 18px rgba(45,255,159,.35);
+      display:inline-block;
+    }
+
+    /* YouTube Showcase */
+    .videoWrap{
+      border-radius: 18px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.18);
+      overflow:hidden;
+      position:relative;
+    }
+    .videoWrap:before{
+      content:"";
+      position:absolute; inset:0;
+      background:
+        radial-gradient(420px 220px at 20% 15%, rgba(89,242,255,.10), transparent 60%),
+        radial-gradient(420px 220px at 80% 30%, rgba(157,123,255,.09), transparent 60%);
+      pointer-events:none;
+      z-index:1;
+    }
+    .heroVideo{
+      width:100%;
+      height:100%;
+      aspect-ratio: 16 / 10;
+      border:0;
+      display:block;
+      position:relative;
+      z-index:0;
+      background: rgba(0,0,0,.22);
+    }
+
+    /* ===== Sections ===== */
+    section{ padding: 52px 0; }
+    .sectionHead{
+      display:flex; align-items:flex-end; justify-content:space-between;
+      gap:14px; flex-wrap:wrap;
+      margin-bottom: 16px;
+    }
+    .sectionHead h2{ margin:0; font-size: var(--h2); letter-spacing:-.3px; line-height:1.15; }
+    .sectionHead p{ margin:0; color: var(--muted); max-width: 66ch; line-height:1.5; font-size: var(--p); }
+
+    .cardGrid{ display:grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+    .card{
+      grid-column: span 4;
+      padding: 18px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.04));
+      box-shadow: 0 18px 55px rgba(0,0,0,.24);
+      position:relative;
+      overflow:hidden;
+    }
+    .card:before{
+      content:"";
+      position:absolute; inset:-2px;
+      background:
+        radial-gradient(240px 160px at 15% 10%, rgba(89,242,255,.18), transparent 60%),
+        radial-gradient(260px 180px at 85% 30%, rgba(157,123,255,.14), transparent 55%);
+      opacity:.60;
+      pointer-events:none;
+    }
+    .card > *{ position:relative; }
+    .icon{
+      width:40px; height:40px; border-radius:14px;
+      background: rgba(255,255,255,.07);
+      border:1px solid rgba(255,255,255,.12);
+      display:grid; place-items:center;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.04) inset;
+      margin-bottom: 12px;
+    }
+    .icon svg{ width:20px; height:20px; opacity:.92; }
+    .card h3{ margin: 4px 0 6px; font-size: 16px; letter-spacing:.1px; }
+    .card p{ margin:0; color:var(--muted); line-height:1.55; font-size: var(--p); }
+
+    .split{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .steps{ display:grid; grid-template-columns: 1fr; gap: 12px; }
+    .step{
+      padding: 14px 14px;
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      display:flex; gap:12px; align-items:flex-start;
+    }
+    .num{
+      width:34px; height:34px; border-radius:14px;
+      display:grid; place-items:center;
+      font-family:var(--mono);
+      font-weight:700;
+      color:#07101a;
+      background: linear-gradient(135deg, rgba(89,242,255,.95), rgba(157,123,255,.85));
+      box-shadow: 0 0 28px rgba(89,242,255,.15);
+      flex: 0 0 auto;
+    }
+    .step b{ display:block; margin-bottom:3px; }
+    .step span{ color: var(--muted); line-height:1.45; font-size: var(--p); }
+
+    .industries{ display:grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+    .tag{
+      grid-column: span 3;
+      padding: 12px 12px;
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      display:flex; align-items:center; gap:10px;
+      color: var(--muted);
+    }
+    .tag i{
+      width:10px; height:10px; border-radius:999px;
+      background: rgba(89,242,255,.95);
+      box-shadow: 0 0 18px rgba(89,242,255,.22);
+    }
+
+    footer{
+      padding: 26px 0 40px;
+      color: var(--muted2);
+      font-size: 12.5px;
+      border-top:1px solid rgba(255,255,255,.08);
+      background: rgba(0,0,0,.12);
+    }
+    .foot{ display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center; }
+    .foot a{ color: rgba(89,242,255,.85); }
+    .fine{ font-family:var(--mono); opacity:.85; }
+
+    /* ===== Mobile ===== */
+    @media (max-width: 960px){
+      .heroGrid{ grid-template-columns: 1fr; }
+      .navlinks{ display:none; }
+      .hamburger{ display:flex; }
+      .card{ grid-column: span 6; }
+      .split{ grid-template-columns: 1fr; }
+      .tag{ grid-column: span 6; }
+    }
+    @media (max-width: 560px){
+      .card{ grid-column: span 12; }
+      .tag{ grid-column: span 12; }
+      .heroActions .btn{ width:auto; }
+    }
+
+    /* ===== Entrance animations ===== */
+    .reveal{ opacity:0; transform: translateY(14px); transition: opacity .55s ease, transform .55s ease; }
+    .reveal.show{ opacity:1; transform: translateY(0); }
+
+    /* ===== Drawer ===== */
+    .drawer{
+      position:fixed; inset:0; z-index:110;
+      display:none;
+      background: rgba(0,0,0,.6);
+      backdrop-filter: blur(10px);
+    }
+    .drawer.show{ display:block; }
+    .drawerPanel{
+      position:absolute; right:0; top:0; height:100%;
+      width:min(360px, 92vw);
+      border-left:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(7,9,16,.92), rgba(7,9,16,.78));
+      padding: 16px;
+    }
+    .drawerPanel a{
+      display:block;
+      padding: 12px 12px;
+      border-radius: 14px;
+      color:var(--muted);
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.05);
+      margin-bottom: 10px;
+    }
+    .drawerPanel a:hover{ color: var(--ink); border-color: rgba(255,255,255,.14); }
+    .x{
+      width:40px; height:40px; border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: var(--ink);
+      cursor:pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="bg-overlay"></div>
+  <div class="streak"></div>
+  <div class="streak s2"></div>
+
+  <!-- NAV -->
+  <header>
+    <div class="wrap">
+      <div class="nav">
+        <a class="brand" href="#top" aria-label="AnswerInstant AI home">
+          <div class="logo" aria-hidden="true"></div>
+          <div>
+            <b>AnswerInstant <span style="opacity:.9">AI</span></b>
+            <small>AI receptionist + follow-up automation</small>
+          </div>
+        </a>
+
+        <nav class="navlinks" aria-label="primary">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="#industries">Industries</a>
+        </nav>
+
+        <div class="navcta">
+          <a class="btn primary" href="#booking">View booking</a>
+          <button class="hamburger" id="openDrawer" aria-label="Open menu"><span></span></button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MOBILE DRAWER -->
+  <div class="drawer" id="drawer">
+    <div class="drawerPanel">
+      <button class="x" id="closeDrawer" aria-label="Close menu">✕</button>
+      <div style="height:12px"></div>
+      <a href="#features" class="drawerLink">Features</a>
+      <a href="#how" class="drawerLink">How it works</a>
+      <a href="#industries" class="drawerLink">Industries</a>
+      <a href="#booking" class="drawerLink">View booking</a>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <main id="top" class="hero">
+    <div class="wrap">
+      <div class="heroGrid">
+        <div class="reveal">
+          <div class="kicker">
+            <span class="dot" aria-hidden="true"></span>
+            AnswerInstant AI — calls + texts + booking, 24/7
+          </div>
+
+          <h1>
+            Let <span class="grad">AI</span> answer, book, and follow up — so you never miss a lead.
+          </h1>
+
+          <p class="sub">
+            AnswerInstant AI is a professional AI receptionist that responds instantly,
+            captures customer details, schedules appointments, and keeps conversations moving —
+            in your brand voice.
+          </p>
+
+          <!-- ONLY CTA (minimal) -->
+          <div class="heroActions">
+            <a class="btn primary" href="#booking">View booking</a>
+          </div>
+        </div>
+
+        <!-- VIDEO PANEL -->
+        <div class="panel reveal" aria-label="product video preview">
+          <div class="panelInner">
+            <div class="miniTitle">
+              <div>
+                <b>Watch the demo</b>
+                <div style="color:var(--muted2); font-size:12px; margin-top:2px;">Auto-plays muted (browser rules)</div>
+              </div>
+              <div class="status"><i></i> LIVE</div>
+            </div>
+
+            <div class="videoWrap">
+              <iframe
+                class="heroVideo"
+                src="https://www.youtube.com/embed/fBO7GNTnpe8?autoplay=1&mute=1&controls=1&loop=1&playlist=fBO7GNTnpe8&modestbranding=1&rel=0&playsinline=1"
+                title="AnswerInstant AI demo"
+                frameborder="0"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowfullscreen>
+              </iframe>
+            </div>
+
+            <div style="margin-top:12px;">
+              <a class="btn primary" style="width:100%; justify-content:center;" href="#booking">View booking</a>
+              <div style="margin-top:10px; color:var(--muted2); font-size:12.5px; line-height:1.5;">
+                If autoplay doesn’t trigger on mobile, tap play once.
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="wrap">
+      <div class="sectionHead reveal">
+        <div>
+          <h2>Built for trust, speed, and real-world operations.</h2>
+          <p>Clean, professional automation that feels premium for customers — and effortless for you.</p>
+        </div>
+      </div>
+
+      <div class="cardGrid">
+        <div class="card reveal">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke="currentColor" opacity=".9"/>
+              <path d="M8 8h8M8 12h6M8 16h7" stroke="currentColor" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>Lead capture (structured)</h3>
+          <p>Instant answers + clean intake so every inquiry becomes a trackable lead.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 8a6 6 0 0 1 12 0v6a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V8Z" stroke="currentColor"/>
+              <path d="M9 21h6" stroke="currentColor" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>Human tone (on-brand)</h3>
+          <p>Calm, confident responses that follow your rules and match your voice.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 12a8 8 0 1 0 16 0" stroke="currentColor" />
+              <path d="M12 4v8l5 3" stroke="currentColor" stroke-linecap="round" />
+            </svg>
+          </div>
+          <h3>Booking + reminders</h3>
+          <p>Auto-confirm and reduce no-shows with clean scheduling flow.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M7 12h10M12 7v10" stroke="currentColor" stroke-linecap="round"/>
+              <path d="M4 6a2 2 0 0 1 2-2h3l1 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" stroke="currentColor" opacity=".9"/>
+            </svg>
+          </div>
+          <h3>Escalation rules</h3>
+          <p>AI hands off instantly when needed — you stay in control.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M5 12l4 4L19 6" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
+            </svg>
+          </div>
+          <h3>Fast launch</h3>
+          <p>Guided setup so you can go live quickly without messy dashboards.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 19h16" stroke="currentColor" stroke-linecap="round"/>
+              <path d="M6 16V8m6 8V5m6 11v-6" stroke="currentColor" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>Visibility</h3>
+          <p>See what was captured, booked, and missed — then improve scripts.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section id="how">
+    <div class="wrap">
+      <div class="sectionHead reveal">
+        <div>
+          <h2>How it works</h2>
+          <p>Simple setup. Professional execution.</p>
+        </div>
+      </div>
+
+      <div class="split">
+        <div class="panel reveal">
+          <div class="panelInner">
+            <div class="miniTitle">
+              <div>
+                <b>Step-by-step</b>
+                <div style="color:var(--muted2); font-size:12px; margin-top:2px;">3 steps</div>
+              </div>
+              <div class="status"><i></i> READY</div>
+            </div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="num">01</div>
+                <div>
+                  <b>Connect</b>
+                  <span>Forward calls/texts or launch a new line. Set hours and rules.</span>
+                </div>
+              </div>
+              <div class="step">
+                <div class="num">02</div>
+                <div>
+                  <b>Train</b>
+                  <span>We align scripts to your policies, services, and tone.</span>
+                </div>
+              </div>
+              <div class="step">
+                <div class
